@@ -10,7 +10,12 @@ const buyTicket = async (req, res) => {
     const { eventId, discountCode, teamMembers } = req.body;
     const userId = req.userId; 
 
-    const event = await Event.findById(eventId);
+    // 1. Parallel Database Checks (Faster than sequential)
+    const [event, user] = await Promise.all([
+        Event.findById(eventId),
+        User.findById(userId)
+    ]);
+
     if (!event) return res.status(404).json({ message: "Event not found" });
 
     if (event.soldTickets >= event.totalTickets) {
@@ -23,6 +28,7 @@ const buyTicket = async (req, res) => {
         }
     }
 
+    // Calculate Price
     let finalPrice = event.price;
     if (discountCode) {
       const discount = await Discount.findOne({ code: discountCode, isActive: true });
@@ -35,6 +41,7 @@ const buyTicket = async (req, res) => {
 
     const uniqueId = `SMEC-${Math.floor(10000 + Math.random() * 90000)}`;
 
+    // Create Ticket
     const ticket = await Ticket.create({
       user: userId,
       event: eventId,
@@ -44,12 +51,17 @@ const buyTicket = async (req, res) => {
       teamMembers: teamMembers || []
     });
 
+    // Update Event
     event.soldTickets += 1;
     await event.save();
 
-    const user = await User.findById(userId);
+    // =======================================================
+    // 🚀 OPTIMIZATION: FIRE AND FORGET EMAIL LOGIC
+    // Remove 'await' so the user gets a response immediately.
+    // =======================================================
+    
     const adminEmail = "team.smec2026@gmail.com"; 
-
+    
     let membersHtml = '';
     if (teamMembers && teamMembers.length > 0) {
         membersHtml = `\nTeam Members:\n${teamMembers.map(m => `- ${m.fullName} (${m.universityName || 'N/A'})`).join('\n')}`;
@@ -60,7 +72,7 @@ const buyTicket = async (req, res) => {
       
       Your Pass is Confirmed! 
       Event: ${event.title}
-      Ticket ID: ${uniqueId}  <-- SHOW THIS AT ENTRY
+      Ticket ID: ${uniqueId}
       Time: ${event.time}
       Location: ${event.location}
       Price Paid: PKR ${finalPrice}
@@ -70,16 +82,15 @@ const buyTicket = async (req, res) => {
       Team SMEC
     `;
 
-    // Email to Buyer
-    await sendEmail(user.email, `Ticket Confirmation: ${uniqueId}`, emailBody);
+    const adminBody = `New Ticket Sold - ${event.title}\nUser: ${user.fullName}\nRevenue: ${finalPrice}`;
 
-    // Email to Admin
-    await sendEmail(
-      adminEmail,
-      `New Sale: ${event.title}`,
-      `User ${user.fullName} bought a ticket.\nTicket ID: ${uniqueId}\nRevenue: ${finalPrice}\n${membersHtml}`
-    );
+    // Send emails in background without holding up the request
+    Promise.all([
+        sendEmail(user.email, `Ticket Confirmation: ${uniqueId}`, emailBody),
+        sendEmail(adminEmail, `New Sale: ${event.title}`, adminBody)
+    ]).catch(err => console.error("Email sending failed (Background):", err));
 
+    // Send Response Immediately
     res.status(200).json({ success: true, message: "Ticket Purchased!", ticket });
 
   } catch (error) {
@@ -148,21 +159,19 @@ const getMyTickets = async (req, res) => {
 
 const getAdminStats = async (req, res) => {
     try {
-        // 1. Calculate Real Revenue (Sum of pricePaid from all tickets)
-        const revenueAgg = await Ticket.aggregate([
-            { $group: { _id: null, total: { $sum: "$pricePaid" } } }
+        // Run database queries in parallel for speed
+        const [revenueAgg, totalTicketsSold, totalEvents, lowStockEvents] = await Promise.all([
+            // 1. Revenue
+            Ticket.aggregate([{ $group: { _id: null, total: { $sum: "$pricePaid" } } }]),
+            // 2. Tickets Sold
+            Ticket.countDocuments(),
+            // 3. Events Count
+            Event.countDocuments(),
+            // 4. Low Stock (Using DB Query instead of JS Filter is faster)
+            Event.find({ $expr: { $lt: [{ $subtract: ["$totalTickets", "$soldTickets"] }, 5] } })
         ]);
+
         const totalRevenue = revenueAgg.length > 0 ? revenueAgg[0].total : 0;
-
-        // 2. Count Total Tickets Sold
-        const totalTicketsSold = await Ticket.countDocuments();
-
-        // 3. Count Total Events
-        const totalEvents = await Event.countDocuments();
-
-        // 4. Find Low Stock Events (Active events with < 5 tickets)
-        const events = await Event.find();
-        const lowStockEvents = events.filter(e => (e.totalTickets - e.soldTickets) < 5);
 
         res.status(200).json({ 
             success: true, 
@@ -177,5 +186,6 @@ const getAdminStats = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
 
 module.exports = { buyTicket, createDiscount,getAllDiscounts,toggleDiscountStatus, deleteDiscount, getMyTickets,getAdminStats };
