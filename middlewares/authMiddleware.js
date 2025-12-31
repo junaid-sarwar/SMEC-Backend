@@ -14,7 +14,7 @@ const protect = async(req,res,next)=>{
     try {
         const decoded = jwt.verify(token,process.env.JWT_SECRET_KEY)
         req.userId = decoded.userId;
-        console.log("decoded",decoded)
+        // console.log("decoded",decoded)
         next();
     } catch (error) {
         console.log("error: ",error);
@@ -22,7 +22,7 @@ const protect = async(req,res,next)=>{
             message: "Invalid or expired Token",
         })
     }
-    console.log("token", token)
+    // console.log("token", token)
 };
 
 module.exports = {

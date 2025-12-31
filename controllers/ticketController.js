@@ -123,4 +123,59 @@ const toggleDiscountStatus = async (req, res) => {
     }
 }
 
-module.exports = { buyTicket, createDiscount,getAllDiscounts,toggleDiscountStatus };
+// DELETE DISCOUNT CODE
+const deleteDiscount = async (req, res) => {
+    try {
+        const { id } = req.params;
+        await Discount.findByIdAndDelete(id);
+        res.status(200).json({ success: true, message: "Deleted" });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+const getMyTickets = async (req, res) => {
+    try {
+        const tickets = await Ticket.find({ user: req.userId })
+            .populate('event') // Get Event details (Title, Time, etc.)
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({ success: true, tickets });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+const getAdminStats = async (req, res) => {
+    try {
+        // 1. Calculate Real Revenue (Sum of pricePaid from all tickets)
+        const revenueAgg = await Ticket.aggregate([
+            { $group: { _id: null, total: { $sum: "$pricePaid" } } }
+        ]);
+        const totalRevenue = revenueAgg.length > 0 ? revenueAgg[0].total : 0;
+
+        // 2. Count Total Tickets Sold
+        const totalTicketsSold = await Ticket.countDocuments();
+
+        // 3. Count Total Events
+        const totalEvents = await Event.countDocuments();
+
+        // 4. Find Low Stock Events (Active events with < 5 tickets)
+        const events = await Event.find();
+        const lowStockEvents = events.filter(e => (e.totalTickets - e.soldTickets) < 5);
+
+        res.status(200).json({ 
+            success: true, 
+            stats: {
+                totalRevenue,
+                totalTicketsSold,
+                totalEvents,
+                lowStockEvents
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+module.exports = { buyTicket, createDiscount,getAllDiscounts,toggleDiscountStatus, deleteDiscount, getMyTickets,getAdminStats };
