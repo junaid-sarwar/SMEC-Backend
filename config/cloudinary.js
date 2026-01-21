@@ -1,8 +1,6 @@
 // config/cloudinary.js
-const cloudinary = require('cloudinary');
+const cloudinary = require('cloudinary').v2; // <--- YAHAN .v2 LAZMI HAI
 const multer = require('multer');
-
-// 👇 EXPLICIT import from the object you just logged
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 cloudinary.config({

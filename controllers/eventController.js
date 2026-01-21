@@ -16,37 +16,37 @@ const createCategory = async (req, res) => {
 // 2. Create Event (Updated with teamSize)
 const createEvent = async (req, res) => {
   try {
-    // teamSize body se nikaal rahe hain (Default 1 agar na ho)
-    const {
-      title,
-      description,
-      category,
-      date,
-      time,
-      location,
-      price,
-      totalTickets,
-      teamSize,
-    } = req.body;
+    console.log("--- ATTEMPTING TO CREATE EVENT ---");
+    console.log("Body:", req.body);
+
+    const { title, description, category, date, time, location, price, totalTickets, teamSize } = req.body;
+
+    // 1. Enum Match Fix: Frontend se agar "Geeks (Coding)" aaye to usey "Geeks" karo
+    let finalCategory = category;
+    if (category === "Geeks (Coding)") finalCategory = "Geeks";
 
     const image = req.file ? req.file.path : null;
 
+    // 2. Direct Create (Bina Category ID ke jhamele ke)
     const event = await Event.create({
       title,
       description,
-      category,
+      category: finalCategory, // Strictly String (E-Games, Geeks, or General Games)
       date,
       time,
       location,
-      price,
-      totalTickets,
-      image,
-      teamSize: teamSize || 1,
+      price: Number(price), 
+      totalTickets: Number(totalTickets),
+      image: image,
+      teamSize: Number(teamSize) || 1,
     });
 
+    console.log("✅ SUCCESS: Event Created in DB");
     res.status(201).json({ success: true, message: "Event Created!", event });
+
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("❌ BACKEND ERROR:", error.message);
+    res.status(400).json({ success: false, message: error.message });
   }
 };
 

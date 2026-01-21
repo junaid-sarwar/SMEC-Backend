@@ -28,7 +28,16 @@ router.post("/buy-ticket", protect, buyTicket);
 
 // Admin Routes
 router.post("/category", protect, isAdmin, createCategory);
-router.post("/create", protect, isAdmin, upload.single("image"), createEvent); // Image upload here
+// routes/eventRoutes.js
+router.post("/create", protect, isAdmin, (req, res, next) => {
+  upload.single("image")(req, res, (err) => {
+    if (err) {
+      console.error("MULTER ERROR:", err);
+      return res.status(400).json({ success: false, message: err.message });
+    }
+    next();
+  });
+}, createEvent); // Image upload here
 
 router.post("/discount", protect, isAdmin, createDiscount);
 router.get("/discounts", protect, isAdmin, getAllDiscounts); // [NEW] Get All
